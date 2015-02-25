@@ -1,0 +1,9 @@
+%!: /header.html
+<h1>Buttontests</h1><br><table width="100%">
+<button id="demo" onclick="myFunction()">Click me.</button>
+
+<script>
+function myFunction() {
+    document.getElementById("demo").innerHTML = "YOU CLICKED ME!";
+}
+</script>

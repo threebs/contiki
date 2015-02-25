@@ -10,9 +10,7 @@ h1
 body
 {
 
-  background-color: #AAD8F7;
-  background-image: url("3BIcon.png");
-  
+  background-color: #fffeec;
   color:black;
 
   font-size:8pt;
@@ -35,7 +33,7 @@ body
   padding:10px;
 	
   border: solid 1px;
-  background-color: #AAD8F7;
+  background-color: #fffcd2;
   text-align:left;
   
   font-size:9pt;
@@ -68,7 +66,7 @@ body
   padding:10px;
 
   border: solid 1px;
-  background-color: #AAD8F7;
+  background-color: #fffcd2;
   text-align:left;
   font-size:8pt;
   font-family:arial,helvetica;
