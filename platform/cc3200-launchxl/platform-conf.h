@@ -155,4 +155,6 @@
 
 /** @} */
 
+#define RPL_DIS_INTERVAL_CONF 5
+
 #endif /* PLATFORM_CONF_H_ */

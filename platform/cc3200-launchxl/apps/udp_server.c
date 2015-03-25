@@ -1,0 +1,241 @@
+/*
+ * Copyright (c) 2011, Swedish Institute of Computer Science.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the Institute nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * This file is part of the Contiki operating system.
+ *
+ */
+
+#define DEBUG 1
+#if DEBUG
+#define PRINTF(...) printf(__VA_ARGS__)
+#define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
+#define PRINTLLADDR(lladdr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x]", (lladdr)->addr[0], (lladdr)->addr[1], (lladdr)->addr[2], (lladdr)->addr[3], (lladdr)->addr[4], (lladdr)->addr[5])
+#else
+#define PRINTF(...)
+#define PRINT6ADDR(addr)
+#define PRINTLLADDR(addr)
+#endif
+
+#include "contiki.h"
+#include "lib/random.h"
+#include "sys/ctimer.h"
+#include "sys/etimer.h"
+#include "sys/timer.h"
+#include "net/ip/uip.h"
+#include "net/ipv6/uip-ds6.h"
+
+#include "simple-udp.h"
+#include "udp_server.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#define UDP_PORT 3000
+
+#define SEND_INTERVAL		(10 * CLOCK_SECOND)
+#define SEND_TIME			(4 * CLOCK_SECOND)
+
+static struct simple_udp_connection broadcast_connection;
+static neighborList neighbors;
+uint8_t *broadcast_message = "I am here";
+uint8_t *response_message = "Hey there";
+
+/*---------------------------------------------------------------------------*/
+int neighborMember(neighborList neighbors, uip_ipaddr_t *sender_addr)
+{
+	neighborList tmp;
+
+	for(tmp = neighbors; tmp != NULL; tmp = tmp->next)
+	{
+		if (uip_ipaddr_cmp(&tmp->ipaddr, sender_addr))
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+neighborList updateLastNeighborActivity(neighborList neighbors, uip_ipaddr_t *sender_addr)
+{
+	if (neighbors == NULL)
+	{
+		return NULL;
+	}
+	else if (uip_ipaddr_cmp(&neighbors->ipaddr, sender_addr))
+	{
+		neighbors->lastActivity = clock_time();
+		return neighbors;
+	}
+	else
+	{
+		neighbors->next = updateLastNeighborActivity(neighbors->next, sender_addr);
+		return neighbors;
+	}
+}
+
+neighborList insertNeighbor(neighborList neighbors, uip_ipaddr_t *sender_addr)
+{
+	if (neighborMember(neighbors, sender_addr) == 1)
+	{
+		return updateLastNeighborActivity(neighbors, sender_addr);
+	}
+	else
+	{
+		PRINTF("INSERTING NEW NEIGHBOR\n");
+		neighborList tmp = malloc(sizeof(neighborElement_t));
+		tmp->lastActivity = clock_time();
+		uip_ipaddr_copy(&tmp->ipaddr, sender_addr);
+		tmp->next = neighbors;
+
+		if (neighbors == NULL)
+		{
+			tmp->id = 1;
+		}
+		else
+		{
+			tmp->id = neighbors->id + 1;
+		}
+
+		return tmp;
+	}
+}
+
+neighborList removeInactivNeighbors(neighborList neighbors)
+{
+	if (neighbors == NULL)
+	{
+		return NULL;
+	}
+	else if (neighbors->lastActivity <= clock_time() - 3000)
+	{
+		PRINTF("Timeout neighbor: ");
+		PRINT6ADDR(&neighbors->ipaddr);
+		PRINTF("\n");
+
+		neighborList tmp = neighbors;
+		neighbors = neighbors->next;
+		free(tmp);
+		return removeInactivNeighbors(neighbors);
+	}
+	else
+	{
+		neighbors->next = removeInactivNeighbors(neighbors->next);
+		return neighbors;
+	}
+}
+
+void showAllNeighbors(neighborList neighbors)
+{
+	if (neighbors == NULL)
+	{
+	}
+	else
+	{
+		PRINTF("%d: ", neighbors->id);
+		PRINT6ADDR(&neighbors->ipaddr);
+		PRINTF("\n");
+
+		showAllNeighbors(neighbors->next);
+	}
+}
+/*---------------------------------------------------------------------------*/
+
+
+/*---------------------------------------------------------------------------*/
+PROCESS(udp_server_process, "UDP broadcast Server process");
+/*---------------------------------------------------------------------------*/
+static void
+receiver(struct simple_udp_connection *c,
+         const uip_ipaddr_t *sender_addr,
+         uint16_t sender_port,
+         const uip_ipaddr_t *receiver_addr,
+         uint16_t receiver_port,
+         const uint8_t *data,
+         uint16_t datalen)
+{
+
+	PRINTF("\"%s\" received from ", data);
+	PRINT6ADDR(sender_addr);
+	PRINTF("\n");
+
+	if (strcmp(data,broadcast_message) == 0)
+	{
+		responser();
+	}
+	else if (strcmp(data,response_message) == 0)
+	{
+		neighbors = insertNeighbor(neighbors, sender_addr);
+	}
+}
+/*---------------------------------------------------------------------------*/
+void
+responser()
+{
+	uip_ipaddr_t addr;
+	uip_create_linklocal_allnodes_mcast(&addr);
+
+	PRINTF("Sending \"%s\" \n", response_message);
+
+    simple_udp_sendto(&broadcast_connection, response_message, strlen(response_message), &addr);
+
+}
+/*---------------------------------------------------------------------------*/
+PROCESS_THREAD(udp_server_process, ev, data)
+{
+  static struct etimer periodic_timer;
+  static struct etimer send_timer;
+  uip_ipaddr_t addr;
+
+  PROCESS_BEGIN();
+
+  neighbors = NULL;
+
+  simple_udp_register(&broadcast_connection, UDP_PORT,
+                      NULL, UDP_PORT,
+                      receiver);
+
+  etimer_set(&periodic_timer, SEND_INTERVAL);
+  while(1) {
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
+    etimer_reset(&periodic_timer);
+    etimer_set(&send_timer, SEND_TIME);
+
+    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&send_timer));
+    PRINTF("Sending broadcast message: %s\n", broadcast_message);
+    uip_create_linklocal_allnodes_mcast(&addr);
+    simple_udp_sendto(&broadcast_connection, broadcast_message, strlen(broadcast_message), &addr);
+    PRINTF("\n\n------------NEIGHBORS------------\n");
+    showAllNeighbors(neighbors);
+    neighbors = removeInactivNeighbors(neighbors);
+    PRINTF("\n\n");
+  }
+
+  PROCESS_END();
+}
+/*---------------------------------------------------------------------------*/

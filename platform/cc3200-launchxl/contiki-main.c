@@ -39,6 +39,8 @@
  */
 /*---------------------------------------------------------------------------*/
 #include "contiki.h"
+#include "contiki-net.h"
+
 
 #include "dev/leds.h"
 #include "dev/watchdog.h"
@@ -61,6 +63,7 @@
 #include "net/wifi-drv.h"
 #endif
 #include "apps/blink.h"
+#include "apps/udp_server.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -221,6 +224,35 @@ contiki_main(void *pv_parameters)
 	// Start IPv6 <--> IPv4 translator
 	// for CC32xx wireless network interface
 	ip64_init();
+
+	printf("Tentative link-local IPv6 address ");
+    {
+        uip_ds6_addr_t *lladdr;
+        int i;
+        lladdr = uip_ds6_get_link_local(-1);
+        for(i = 0; i < 7; ++i) {
+            printf("%02x%02x:", lladdr->ipaddr.u8[i * 2],
+                    lladdr->ipaddr.u8[i * 2 + 1]);
+        }
+        printf("%02x%02x\n \n", lladdr->ipaddr.u8[14], lladdr->ipaddr.u8[15]);
+    }
+
+    if(!UIP_CONF_IPV6_RPL) {
+        uip_ipaddr_t ipaddr;
+        int i;
+        uip_ip6addr(&ipaddr, 0xaaaa, 0, 0, 0, 0, 0, 0, 0);
+        uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
+        uip_ds6_addr_add(&ipaddr, 0, ADDR_TENTATIVE);
+        printf("Tentative global IPv6 address ");
+        for(i = 0; i < 7; ++i) {
+            printf("%02x%02x:",
+            ipaddr.u8[i * 2], ipaddr.u8[i * 2 + 1]);
+        }
+        printf("%02x%02x\n \n",
+        ipaddr.u8[7 * 2], ipaddr.u8[7 * 2 + 1]);
+    }
+
+
 #else
 	// Start TCP/IP stack
 	process_start(&tcpip_process, NULL);
@@ -236,6 +268,7 @@ contiki_main(void *pv_parameters)
 	fade(LEDS_GREEN);
 
 	process_start(&blink_process, NULL);
+	process_start(&udp_server_process, NULL);
 
 	while(1)
 	{

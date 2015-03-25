@@ -101,6 +101,8 @@ static const char proc_name[] = /*  "processes"*/
  0x65, 0x73, 0};
 static const char togglegreen_name[] = /*  "togglegreen"*/
 {0x74, 0x6f, 0x67, 0x67, 0x6c, 0x65, 0x67, 0x72, 0x65, 0x65, 0x6e, 0};
+static const char   nbrs_name[] = /*  "neighbors"*/
+{0x6e, 0x65, 0x69, 0x67, 0x68, 0x62, 0x6f, 0x72, 0x73, 0};
 
 static const char *states[] = {
   closed,
@@ -354,6 +356,12 @@ PT_THREAD(toggle_led())
 	leds_toggle(LEDS_GREEN);
 }
 /*---------------------------------------------------------------------------*/
+static
+PT_THREAD(neighbors())
+{
+	;
+}
+/*---------------------------------------------------------------------------*/
 void
 httpd_cgi_add(struct httpd_cgi_call *c)
 {
@@ -377,9 +385,9 @@ HTTPD_CGI_CALL(file, file_name, file_stats);
 HTTPD_CGI_CALL(tcp, tcp_name, tcp_stats);
 HTTPD_CGI_CALL(proc, proc_name, processes);
 HTTPD_CGI_CALL(togglegreen, togglegreen_name, toggle_led);
+HTTPD_CGI_CALL(nbrs, nbrs_name, neighbors);
 #if WEBSERVER_CONF_STATUSPAGE && NETSTACK_CONF_WITH_IPV6
 HTTPD_CGI_CALL(adrs, adrs_name, addresses);
-HTTPD_CGI_CALL(nbrs, nbrs_name, neighbors);
 HTTPD_CGI_CALL(rtes, rtes_name, routes);
 #endif
 
@@ -390,9 +398,9 @@ httpd_cgi_init(void)
   httpd_cgi_add(&tcp);
   httpd_cgi_add(&proc);
   httpd_cgi_add(&togglegreen);
+  httpd_cgi_add(&nbrs);
 #if WEBSERVER_CONF_STATUSPAGE && NETSTACK_CONF_WITH_IPV6
   httpd_cgi_add(&adrs);
-  httpd_cgi_add(&nbrs);
   httpd_cgi_add(&rtes);
 #endif
 }
