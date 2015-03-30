@@ -30,7 +30,7 @@
  *
  */
 
-#define DEBUG 1
+#define DEBUG 0
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
@@ -193,14 +193,6 @@ receiver(struct simple_udp_connection *c,
 
 		responser();
 	}
-//	if (!strstr(data, receiver_addr) != NULL)
-//	{
-//		leds_toggle(LEDS_GREEN);
-//	}
-//	else if (strcmp(data,response_message) == 0)
-//	{
-//		neighbors = insertNeighbor(neighbors, sender_addr);
-//	}
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -240,14 +232,6 @@ PROCESS_THREAD(udp_server_process, ev, data)
     if ( send_counter % 3 == 0)
     {
     	neighbor_list = removeInactivNeighbors(neighbor_list);
-    }
-
-    if ( send_counter % 6 == 0)
-    {
-    	PRINTF("\n\n------------NEIGHBORS------------\n");
-    	showAllNeighbors(neighbor_list);
-    	PRINTF("\n\n");
-    	send_counter = 0;
     }
 
     PRINTF("Sending broadcast message: \"%s\"\n", broadcast_message);
