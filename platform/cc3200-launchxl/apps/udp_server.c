@@ -54,16 +54,16 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "dev/leds.h"
 
 #define UDP_PORT 3000
 
 #define SEND_INTERVAL		(10 * CLOCK_SECOND)
-#define SEND_TIME			(4 * CLOCK_SECOND)
 
 static struct simple_udp_connection broadcast_connection;
-static neighborList neighbors;
 uint8_t *broadcast_message = "I am here";
 uint8_t *response_message = "Hey there";
+int16_t send_counter = 0;
 
 /*---------------------------------------------------------------------------*/
 int neighborMember(neighborList neighbors, uip_ipaddr_t *sender_addr)
@@ -107,7 +107,10 @@ neighborList insertNeighbor(neighborList neighbors, uip_ipaddr_t *sender_addr)
 	}
 	else
 	{
-		PRINTF("INSERTING NEW NEIGHBOR\n");
+		PRINTF("[INSERT] Neighbor:");
+		PRINT6ADDR(sender_addr);
+		PRINTF("\n");
+
 		neighborList tmp = malloc(sizeof(neighborElement_t));
 		tmp->lastActivity = clock_time();
 		uip_ipaddr_copy(&tmp->ipaddr, sender_addr);
@@ -134,7 +137,7 @@ neighborList removeInactivNeighbors(neighborList neighbors)
 	}
 	else if (neighbors->lastActivity <= clock_time() - 3000)
 	{
-		PRINTF("Timeout neighbor: ");
+		PRINTF("[TIMEOUT] Neighbor: ");
 		PRINT6ADDR(&neighbors->ipaddr);
 		PRINTF("\n");
 
@@ -157,11 +160,11 @@ void showAllNeighbors(neighborList neighbors)
 	}
 	else
 	{
+		showAllNeighbors(neighbors->next);
+
 		PRINTF("%d: ", neighbors->id);
 		PRINT6ADDR(&neighbors->ipaddr);
 		PRINTF("\n");
-
-		showAllNeighbors(neighbors->next);
 	}
 }
 /*---------------------------------------------------------------------------*/
@@ -180,18 +183,24 @@ receiver(struct simple_udp_connection *c,
          uint16_t datalen)
 {
 
-	PRINTF("\"%s\" received from ", data);
+	PRINTF("Receiving \"%s\" from ", data);
 	PRINT6ADDR(sender_addr);
 	PRINTF("\n");
 
 	if (strcmp(data,broadcast_message) == 0)
 	{
+		neighbor_list = insertNeighbor(neighbor_list, sender_addr);
+
 		responser();
 	}
-	else if (strcmp(data,response_message) == 0)
-	{
-		neighbors = insertNeighbor(neighbors, sender_addr);
-	}
+//	if (!strstr(data, receiver_addr) != NULL)
+//	{
+//		leds_toggle(LEDS_GREEN);
+//	}
+//	else if (strcmp(data,response_message) == 0)
+//	{
+//		neighbors = insertNeighbor(neighbors, sender_addr);
+//	}
 }
 /*---------------------------------------------------------------------------*/
 void
@@ -208,32 +217,43 @@ responser()
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(udp_server_process, ev, data)
 {
-  static struct etimer periodic_timer;
   static struct etimer send_timer;
+  static struct etimer timeout_timer;
+
   uip_ipaddr_t addr;
 
   PROCESS_BEGIN();
 
-  neighbors = NULL;
+  neighbor_list = NULL;
 
   simple_udp_register(&broadcast_connection, UDP_PORT,
                       NULL, UDP_PORT,
                       receiver);
 
-  etimer_set(&periodic_timer, SEND_INTERVAL);
+  etimer_set(&send_timer, SEND_INTERVAL);
   while(1) {
-    PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&periodic_timer));
-    etimer_reset(&periodic_timer);
-    etimer_set(&send_timer, SEND_TIME);
+	send_counter = send_counter + 1;
 
     PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&send_timer));
-    PRINTF("Sending broadcast message: %s\n", broadcast_message);
+    etimer_reset(&send_timer);
+
+    if ( send_counter % 3 == 0)
+    {
+    	neighbor_list = removeInactivNeighbors(neighbor_list);
+    }
+
+    if ( send_counter % 6 == 0)
+    {
+    	PRINTF("\n\n------------NEIGHBORS------------\n");
+    	showAllNeighbors(neighbor_list);
+    	PRINTF("\n\n");
+    	send_counter = 0;
+    }
+
+    PRINTF("Sending broadcast message: \"%s\"\n", broadcast_message);
     uip_create_linklocal_allnodes_mcast(&addr);
     simple_udp_sendto(&broadcast_connection, broadcast_message, strlen(broadcast_message), &addr);
-    PRINTF("\n\n------------NEIGHBORS------------\n");
-    showAllNeighbors(neighbors);
-    neighbors = removeInactivNeighbors(neighbors);
-    PRINTF("\n\n");
+
   }
 
   PROCESS_END();

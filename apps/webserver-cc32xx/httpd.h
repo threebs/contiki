@@ -47,6 +47,7 @@ struct httpd_state {
   char state;
   struct httpd_fs_file file;  
   int len;
+  uint8_t starti,savei,startj,savej;
   char *scriptptr;
   int scriptlen;
   union {

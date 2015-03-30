@@ -49,3 +49,7 @@ typedef struct _neighborList{
 	struct _neighborList *next;
 }neighborElement_t, *neighborList;
 
+neighborList neighbor_list;
+
+extern void showAllNeighbors(neighborList neighbors);
+

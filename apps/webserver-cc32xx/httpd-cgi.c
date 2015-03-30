@@ -49,6 +49,8 @@
 #include "httpd-cgi.h"
 #include "httpd-fs.h"
 
+
+#include "apps/udp_server.h"
 #include "dev/leds.h"
 
 
@@ -356,10 +358,62 @@ PT_THREAD(toggle_led())
 	leds_toggle(LEDS_GREEN);
 }
 /*---------------------------------------------------------------------------*/
-static
-PT_THREAD(neighbors())
+#define HTTPD_STRING_ATTR
+#define httpd_snprintf snprintf
+#define httpd_cgi_sprint_ip6 httpd_sprint_ip6
+
+static const char httpd_cgi_addrh[] HTTPD_STRING_ATTR = "<code>";
+static const char httpd_cgi_addrb[] HTTPD_STRING_ATTR = "<br>";
+
+
+neighborList tmp;
+
+static unsigned short
+make_neighbors(void *p)
 {
-	;
+uint16_t numprinted;
+  numprinted = httpd_snprintf((char *)uip_appdata, uip_mss(),httpd_cgi_addrh);
+
+  int8_t name[80];
+
+  for(; tmp != NULL; tmp = tmp->next)
+  {
+
+    strcpy(name, "<button name=\"");
+    strcat(name, tmp->id);
+    strcat(name, "\">");
+
+    numprinted += httpd_snprintf((char *)uip_appdata+numprinted, uip_appdata + numprinted, name);
+    numprinted += httpd_cgi_sprint_ip6(tmp->ipaddr, uip_appdata + numprinted);
+
+    strcpy(name, "</button>");
+    numprinted += httpd_snprintf((char *)uip_appdata+numprinted, uip_appdata + numprinted, name);
+
+    numprinted += httpd_snprintf((char *)uip_appdata+numprinted, uip_mss()-numprinted, httpd_cgi_addrb);
+
+    if(numprinted > (uip_mss() - 200)) {
+    	tmp = tmp->next;
+    	return numprinted;
+    }
+  }
+
+  return numprinted;
+}
+
+/*---------------------------------------------------------------------------*/
+static
+PT_THREAD(neighbors(struct httpd_state *s, char *ptr))
+{
+  PSOCK_BEGIN(&s->sout);
+
+  tmp = neighbor_list;
+
+  while (tmp != NULL)
+  {
+	  PSOCK_GENERATOR_SEND(&s->sout, make_neighbors, (void *)s);
+  }
+
+  PSOCK_END(&s->sout);
 }
 /*---------------------------------------------------------------------------*/
 void
