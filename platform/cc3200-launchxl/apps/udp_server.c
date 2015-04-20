@@ -30,7 +30,7 @@
  *
  */
 
-#define DEBUG 0
+#define DEBUG 1
 #if DEBUG
 #define PRINTF(...) printf(__VA_ARGS__)
 #define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
@@ -48,6 +48,8 @@
 #include "sys/timer.h"
 #include "net/ip/uip.h"
 #include "net/ipv6/uip-ds6.h"
+#include "net/ip/uiplib.h"
+
 
 #include "simple-udp.h"
 #include "udp_server.h"
@@ -56,17 +58,29 @@
 #include <string.h>
 #include "dev/leds.h"
 
+uint8_t httpd_sprint_ip6(uip_ipaddr_t addr, char * result);
+
 #define UDP_PORT 3000
 
 #define SEND_INTERVAL		(10 * CLOCK_SECOND)
 
 static struct simple_udp_connection broadcast_connection;
-uint8_t *broadcast_message = "I am here";
-uint8_t *response_message = "Hey there";
 int16_t send_counter = 0;
 
 /*---------------------------------------------------------------------------*/
-int neighborMember(neighborList neighbors, uip_ipaddr_t *sender_addr)
+int16_t neighborCount(neighborList neighbors)
+{
+	if (neighbors)
+	{
+		return 1 + neighborCount(neighbors->next);
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+int16_t neighborMember(neighborList neighbors, uip_ipaddr_t *sender_addr)
 {
 	neighborList tmp;
 
@@ -175,35 +189,57 @@ PROCESS(udp_server_process, "UDP broadcast Server process");
 /*---------------------------------------------------------------------------*/
 static void
 receiver(struct simple_udp_connection *c,
-         const uip_ipaddr_t *sender_addr,
-         uint16_t sender_port,
-         const uip_ipaddr_t *receiver_addr,
-         uint16_t receiver_port,
-         const uint8_t *data,
-         uint16_t datalen)
+		uip_ipaddr_t *sender_addr,
+        uint16_t sender_port,
+        uip_ipaddr_t *receiver_addr,
+        uint16_t receiver_port,
+        uint8_t *data,
+        uint16_t datalen)
 {
 
-	PRINTF("Receiving \"%s\" from ", data);
+	uint8_t *broadcast_message = "I am here";
+	uint8_t *response_message = "Hey there";
+
+	PRINTF("Receiving \"%.*s\" from ", datalen, data);
 	PRINT6ADDR(sender_addr);
 	PRINTF("\n");
 
-	if (strcmp(data,broadcast_message) == 0)
+	if (strstr(data, broadcast_message) != NULL)
 	{
 		neighbor_list = insertNeighbor(neighbor_list, sender_addr);
 
-		responser();
+		messageToAll(response_message);
 	}
+	else if (strstr(data, response_message) != NULL)
+	{
+
+	}
+	else
+	{
+		uip_ds6_addr_t *lladdr;
+		uip_ipaddr_t tmp;
+
+		uiplib_ipaddrconv(data, &tmp);
+
+        lladdr = uip_ds6_get_link_local(-1);
+
+		if (uip_ipaddr_cmp(&tmp, &lladdr->ipaddr)) {
+			leds_toggle(LEDS_GREEN);
+		}
+	}
+
 }
 /*---------------------------------------------------------------------------*/
 void
-responser()
+messageToAll(const uint8_t *message)
 {
 	uip_ipaddr_t addr;
+
 	uip_create_linklocal_allnodes_mcast(&addr);
 
-	PRINTF("Sending \"%s\" \n", response_message);
+	PRINTF("Sending \"%s\" \n", message);
 
-    simple_udp_sendto(&broadcast_connection, response_message, strlen(response_message), &addr);
+    simple_udp_sendto(&broadcast_connection, message, strlen(message), &addr);
 
 }
 /*---------------------------------------------------------------------------*/
@@ -212,6 +248,7 @@ PROCESS_THREAD(udp_server_process, ev, data)
   static struct etimer send_timer;
   static struct etimer timeout_timer;
 
+  uint8_t *broadcast_message = "I am here";
   uip_ipaddr_t addr;
 
   PROCESS_BEGIN();

@@ -64,6 +64,7 @@ MEMB(conns, struct httpd_state, CONNS);
 #define ISO_period  0x2e
 #define ISO_slash   0x2f
 #define ISO_colon   0x3a
+#define ISO_qmark   0x3f
 
 /*---------------------------------------------------------------------------*/
 static unsigned short
@@ -246,13 +247,16 @@ PT_THREAD(handle_output(struct httpd_state *s))
   PT_END(&s->outputpt);
 }
 /*---------------------------------------------------------------------------*/
+
+const char httpd_ref[] = "Referer:";
+
 static
 PT_THREAD(handle_input(struct httpd_state *s))
 {
   PSOCK_BEGIN(&s->sin);
 
   PSOCK_READTO(&s->sin, ISO_space);
-  
+
   if(strncmp(s->inputbuf, http_get, 4) != 0) {
     PSOCK_CLOSE_EXIT(&s->sin);
   }
@@ -265,8 +269,18 @@ PT_THREAD(handle_input(struct httpd_state *s))
   if(s->inputbuf[1] == ISO_space) {
     strncpy(s->filename, http_index_html, sizeof(s->filename));
   } else {
-    s->inputbuf[PSOCK_DATALEN(&s->sin) - 1] = 0;
-    strncpy(s->filename, s->inputbuf, sizeof(s->filename));
+    uint8_t i;
+    for (i=0;i<sizeof(s->filename)+1;i++) {
+      if (i >= (PSOCK_DATALEN(&s->sin)-1)) break;
+      if (s->inputbuf[i]==ISO_space) break;
+     /* Query string is left in the httpd_query buffer until zeroed by the application! */
+      if (s->inputbuf[i]==ISO_qmark) {
+         strncpy(httpd_query,&s->inputbuf[i+1],sizeof(httpd_query));
+         break;
+      }
+      s->filename[i]=s->inputbuf[i];
+    }
+    s->filename[i]=0;
   }
 
   petsciiconv_topetscii(s->filename, sizeof(s->filename));
@@ -283,7 +297,7 @@ PT_THREAD(handle_input(struct httpd_state *s))
       webserver_log(s->inputbuf);
     }
   }
-  
+
   PSOCK_END(&s->sin);
 }
 /*---------------------------------------------------------------------------*/

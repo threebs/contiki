@@ -1,0 +1,90 @@
+%!: /header.html
+
+<button onclick="toggle()">Toggle my green LED</button>
+<br>
+
+<h4>Neighbors</h4>
+<div id="neighbors"></div>
+
+<script>
+
+    document.getElementById('neighbors').style.cssFloat = 'left';
+    
+	function toggle() {
+	  var r;
+	  try { r = new XMLHttpRequest(); }
+	  catch(e) {
+	    try { r = new ActiveXObject("Msxml2.XMLHTTP"); }
+	    catch(e) {
+	      try { r = new ActiveXObject("Microsoft.XMLHTTP"); }
+	      catch(e) {
+	        alert("Your browser does not support AJAX!");
+	        return false;
+	      }
+	    }
+	  }
+	  start = new Date();
+	  r.open("GET", "/toggle_led.shtml", true);
+	  r.send(null);
+	}
+      
+	var neighbors = [];
+       
+       
+    function toggleLed(ipaddr) {
+    	var r;
+		  try { r = new XMLHttpRequest(); }
+		  catch(e) {
+		    try { r = new ActiveXObject("Msxml2.XMLHTTP"); }
+		    catch(e) {
+		      try { r = new ActiveXObject("Microsoft.XMLHTTP"); }
+		      catch(e) {
+		        alert("Your browser does not support AJAX!");
+		        return false;
+		      }
+		    }
+		  }
+		  start = new Date();
+		  r.open("GET", "/send_toggle.shtml?ip=" + ipaddr, true);
+		  r.send(null);
+    }   
+       
+	function getNeighbors() {
+	  	var r;
+		
+		try { r = new XMLHttpRequest(); }
+	  	catch(e) {
+	    	try { r = new ActiveXObject("Msxml2.XMLHTTP"); }
+	    	catch(e) {
+	      		try { r = new ActiveXObject("Microsoft.XMLHTTP"); }
+	      		catch(e) {
+	        		alert("Your browser does not support AJAX!");
+	        		return false;
+	      		}
+	    	}
+	  	}
+	  	  
+		r.onreadystatechange=function() {
+      		if (r.readyState == 4 && r.status == 200) {
+				neighbors = JSON.parse(r.responseText);
+				var neighborsdiv = document.getElementById("neighbors");
+				for (var i = 0; i < neighbors.length; i++)
+				{
+					var br1 = document.createElement("br");
+					var br2 = document.createElement("br");
+					var button = document.createElement('button');
+					button.name = neighbors[i];
+					button.innerHTML = neighbors[i];
+					button.onclick = function() { toggleLed(this.name); };
+					neighborsdiv.appendChild(button);
+					neighborsdiv.appendChild(br1);
+					neighborsdiv.appendChild(br2);
+				}
+        	}
+		}
+	  	r.open("GET", "/ajax.shtml", true);
+	  	r.send();
+ 	}
+ 	
+    document.addEventListener('DOMContentLoaded', getNeighbors, false);	  
+</script>

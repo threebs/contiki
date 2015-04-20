@@ -43,7 +43,7 @@
 PROCESS_NAME(udp_server_process);
 
 typedef struct _neighborList{
-	int id;
+	int16_t id;
 	clock_time_t lastActivity;
 	uip_ipaddr_t ipaddr;
 	struct _neighborList *next;
@@ -51,5 +51,5 @@ typedef struct _neighborList{
 
 neighborList neighbor_list;
 
-extern void showAllNeighbors(neighborList neighbors);
-
+void messageToAll(const uint8_t *response_message);
+int16_t neighborCount(neighborList neighbors);
